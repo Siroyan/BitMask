@@ -15,13 +15,24 @@ const char* password = WIFI_PW;
 const char* serverName = "http://3.114.89.143/api/device-datas";
 
 unsigned long lastTimeOfSend = 0;
-unsigned long timerDelayOfSend = 10000;
+unsigned long timerDelayOfSend = 1000;
 
 Adafruit_BME680 bme;
 String t, p, h, g;
 
 unsigned long lastTimeOfSampling = 0;
-unsigned long timerDelayOfSampling = 1000;
+unsigned long timerDelayOfSampling = 10;
+
+// 割り込み用タイマー初期化
+hw_timer_t *timer = NULL;
+
+// サービスルーチン
+void IRAM_ATTR sendStatus() {
+	Serial.print(t);Serial.print(",");
+	Serial.print(p);Serial.print(",");
+	Serial.print(h);Serial.print(",");
+	Serial.println(g);
+}
 
 void setup() {
 	// シリアル通信のセットアップ
@@ -44,22 +55,24 @@ void setup() {
 	bme.setPressureOversampling(BME680_OS_4X);
 	bme.setIIRFilterSize(BME680_FILTER_SIZE_3);
 	bme.setGasHeater(320, 150);
+
+	// タイマー割り込みセットアップ
+	timer = timerBegin(0, 80, true);
+	timerAttachInterrupt(timer, &sendStatus, true);
+	timerAlarmWrite(timer, 500000, true); // 100ms
+	timerAlarmEnable(timer);
 }
 
 void loop() {
 	// サーバーにデータを送信
 	if ((millis() - lastTimeOfSend) > timerDelayOfSend) {
 		lastTimeOfSend = millis();
-		Serial.println("Send data to server");
 		if(WiFi.status()== WL_CONNECTED){
 			HTTPClient http;
 			http.begin(serverName);
 			http.addHeader("Content-Type", "application/json");
-			String postBody = "{\"deviceName\":\"device-A\",\"temperature\":" + t + ",\"humidity\":" + h + ",\"pressure\":" + p + ",\"gas\":" + g + "}";
-			Serial.print("Post Body: ");Serial.println(postBody);
+			String postBody = "{\"deviceName\":\"exp-morning\",\"temperature\":" + t + ",\"humidity\":" + h + ",\"pressure\":" + p + ",\"gas\":" + g + "}";
 			int httpResponseCode = http.POST(postBody);
-			Serial.print("HTTP Response code: ");
-			Serial.println(httpResponseCode);
 			http.end();
 		} else {
 			Serial.println("WiFi Disconnected");
@@ -72,7 +85,6 @@ void loop() {
 			Serial.println("Failure");
 			return;
 		}
-		Serial.println("Get sensor data");
 		t = String(bme.temperature);
 		p = String(bme.pressure / 100.0);
 		h = String(bme.humidity);
