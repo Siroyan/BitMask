@@ -33,8 +33,6 @@ bool status = true;
 
 // サービスルーチン
 void IRAM_ATTR sendStatus() {
-	digitalWrite(COM_LED , !status);
-	status = !status;
 	Serial.print(t);Serial.print(",");
 	Serial.print(p);Serial.print(",");
 	Serial.print(h);Serial.print(",");
@@ -83,6 +81,8 @@ void loop() {
 			int httpResponseCode = http.POST(postBody);
 			Serial.println(httpResponseCode);
 			http.end();
+			digitalWrite(COM_LED , !status);
+			status = !status;
 		} else {
 			Serial.println("WiFi Disconnected");
 		}
