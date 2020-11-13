@@ -8,6 +8,8 @@
 #include <Adafruit_Sensor.h>
 #include "Adafruit_BME680.h"
 
+#define HB_LED 18
+#define COM_LED 19
 #define SEALEVELPRESSURE_HPA (1013.25)
 
 const char* ssid = WIFI_SSID;
@@ -21,13 +23,18 @@ Adafruit_BME680 bme;
 String t, p, h, g;
 
 unsigned long lastTimeOfSampling = 0;
-unsigned long timerDelayOfSampling = 10;
+unsigned long timerDelayOfSampling = 1000;
 
 // 割り込み用タイマー初期化
 hw_timer_t *timer = NULL;
 
+// LED状態
+bool status = true;
+
 // サービスルーチン
 void IRAM_ATTR sendStatus() {
+	digitalWrite(COM_LED , !status);
+	status = !status;
 	Serial.print(t);Serial.print(",");
 	Serial.print(p);Serial.print(",");
 	Serial.print(h);Serial.print(",");
@@ -39,28 +46,29 @@ void setup() {
 	Serial.begin(115200);
 	while (!Serial);
 	Serial.println("Serial OK");
-
 	// WiFiのセットアップ
 	WiFi.begin(ssid, password);
 	while(WiFi.status() != WL_CONNECTED);
 	Serial.println("WiFi OK");
-
 	// BME680のセットアップ
 	if (!bme.begin()) {
 		Serial.println("Could not find a valid BME680 sensor");
-		while (1);
+	} else {
+		bme.setTemperatureOversampling(BME680_OS_8X);
+		bme.setHumidityOversampling(BME680_OS_2X);
+		bme.setPressureOversampling(BME680_OS_4X);
+		bme.setIIRFilterSize(BME680_FILTER_SIZE_3);
+		bme.setGasHeater(320, 150);
 	}
-	bme.setTemperatureOversampling(BME680_OS_8X);
-	bme.setHumidityOversampling(BME680_OS_2X);
-	bme.setPressureOversampling(BME680_OS_4X);
-	bme.setIIRFilterSize(BME680_FILTER_SIZE_3);
-	bme.setGasHeater(320, 150);
-
 	// タイマー割り込みセットアップ
 	timer = timerBegin(0, 80, true);
 	timerAttachInterrupt(timer, &sendStatus, true);
 	timerAlarmWrite(timer, 500000, true); // 100ms
 	timerAlarmEnable(timer);
+	// 状態表示LED設定
+	pinMode(HB_LED, OUTPUT);
+	pinMode(COM_LED, OUTPUT);
+	digitalWrite(HB_LED, HIGH);
 }
 
 void loop() {
@@ -71,8 +79,9 @@ void loop() {
 			HTTPClient http;
 			http.begin(serverName);
 			http.addHeader("Content-Type", "application/json");
-			String postBody = "{\"deviceName\":\"exp-morning\",\"temperature\":" + t + ",\"humidity\":" + h + ",\"pressure\":" + p + ",\"gas\":" + g + "}";
+			String postBody = "{\"deviceName\":\"exp-board-test\",\"temperature\":" + t + ",\"humidity\":" + h + ",\"pressure\":" + p + ",\"gas\":" + g + "}";
 			int httpResponseCode = http.POST(postBody);
+			Serial.println(httpResponseCode);
 			http.end();
 		} else {
 			Serial.println("WiFi Disconnected");
